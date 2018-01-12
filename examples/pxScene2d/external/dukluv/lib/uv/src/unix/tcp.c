@@ -26,7 +26,10 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
-
+#include <netdb.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
   int sockfd;
@@ -136,6 +139,31 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   return 0;
 }
 
+const char* uv_tcp_gethostbyname(const char* name) {
+  if (!name) {
+    return NULL;
+  }
+
+  struct sockaddr_in sa;
+  int result = inet_pton(AF_INET, name, &(sa.sin_addr));  //is Valid IpAddress
+  if (result) {
+    return name;
+  }
+
+  struct hostent *he;
+  struct in_addr **addr_list;
+  int i;
+  if ((he = gethostbyname(name)) == NULL) {
+    return NULL;
+  }
+
+  addr_list = (struct in_addr **) he->h_addr_list;
+  for(int i = 0; addr_list[i] != NULL; i++) {
+    return inet_ntoa(*addr_list[i]); //return the first one;
+  }
+  
+  return NULL;
+}
 
 int uv__tcp_connect(uv_connect_t* req,
                     uv_tcp_t* handle,

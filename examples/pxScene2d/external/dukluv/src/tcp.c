@@ -176,9 +176,12 @@ duk_ret_t duv_tcp_connect(duk_context *ctx) {
   });
 
   handle = duk_get_buffer(ctx, 0, NULL);
-  host = duk_get_string(ctx, 1);
+  host = uv_tcp_gethostbyname(duk_get_string(ctx, 1));
   port = duk_get_number(ctx, 2);
   flags = 0;
+  if (!host) {
+    duk_error(ctx, DUK_ERR_TYPE_ERROR, "Invalid hostname, cannot resolve this");
+  }
   if (uv_ip4_addr(host, port, (struct sockaddr_in*)&addr) &&
       uv_ip6_addr(host, port, (struct sockaddr_in6*)&addr)) {
     duk_error(ctx, DUK_ERR_TYPE_ERROR, "Invalid IP address or port");

@@ -529,6 +529,7 @@ enum uv_tcp_flags {
 UV_EXTERN int uv_tcp_bind(uv_tcp_t* handle,
                           const struct sockaddr* addr,
                           unsigned int flags);
+UV_EXTERN const char* uv_tcp_gethostbyname(const char* name);
 UV_EXTERN int uv_tcp_getsockname(const uv_tcp_t* handle,
                                  struct sockaddr* name,
                                  int* namelen);
