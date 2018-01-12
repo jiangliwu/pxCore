@@ -665,6 +665,10 @@ if (isDuk) {
                            reject("include failed due to module not permitted");
                            return;
                            } else if( filePath === 'net' || filePath === 'ws' ||  filePath === 'htmlparser') {
+                           if (filePath === 'ws') {
+                             modData = require('rcvrcore/' + filePath + '_wrap');
+                             onImportComplete([modData, origFilePath]);
+                           }
                            //modData = require('rcvrcore/' + filePath + '_wrap');
                            //onImportComplete([modData, origFilePath]);
                            console.log("Not permitted to use the module " + filePath);
