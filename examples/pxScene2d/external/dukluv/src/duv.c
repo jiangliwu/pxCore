@@ -45,7 +45,7 @@ static const duk_function_list_entry duv_funcs[] = {
   {"stream_set_blocking", duv_stream_set_blocking, 2},
 
   // tcp.c
-  {"new_tcp", duv_new_tcp, 0},
+  {"new_tcp", duv_new_tcp, 1},
   {"tcp_open", duv_tcp_open, 2},
   {"tcp_nodelay", duv_tcp_nodelay, 2},
   {"tcp_keepalive", duv_tcp_keepalive, 3},

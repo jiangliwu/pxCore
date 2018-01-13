@@ -182,7 +182,11 @@ static void uv__stream_osx_select(void* arg) {
     /* Empty socketpair's buffer in case of interruption */
     if (FD_ISSET(s->int_fd, s->sread))
       while (1) {
-        r = read(s->int_fd, buf, sizeof(buf));
+        if (stream->is_security && stream->ssl) {
+          r = SSL_read(stream->ssl, buf, sizeof(buf));
+        }else{
+          r = read(s->int_fd, buf, sizeof(buf));
+        }
 
         if (r == sizeof(buf))
           continue;
@@ -823,9 +827,14 @@ start:
   } else {
     do {
       if (iovcnt == 1) {
-        n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
-      } else {
-        n = writev(uv__stream_fd(stream), iov, iovcnt);
+        if (stream->is_security && stream->ssl) {
+          n = SSL_write(stream->ssl, iov[0].iov_base, iov[0].iov_len);
+        } else {
+          n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
+        }
+      } else { 
+        //there is no SSL_writev can use, so keep this
+        n = writev(uv__stream_fd(stream), iov, iovcnt); 
       }
     }
 #if defined(__APPLE__)
@@ -1134,7 +1143,11 @@ static void uv__read(uv_stream_t* stream) {
 
     if (!is_ipc) {
       do {
-        nread = read(uv__stream_fd(stream), buf.base, buf.len);
+        if (stream->is_security && stream->ssl) {
+          nread = SSL_read(stream->ssl, buf.base, buf.len);
+        }else{
+          nread = read(uv__stream_fd(stream), buf.base, buf.len);
+        }
       }
       while (nread < 0 && errno == EINTR);
     } else {

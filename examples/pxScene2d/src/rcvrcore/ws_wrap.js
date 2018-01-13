@@ -2,7 +2,7 @@
 var isDuk = typeof timers !== "undefined";
 var WS = null;
 if (isDuk) {  // duktape
-  WS = require('ws');
+  WS = require('ws').WebSocket;
 } else {  // node
   WS = require('ws/lib/WebSocket');
   WS.Sender = require('ws/lib/Sender');

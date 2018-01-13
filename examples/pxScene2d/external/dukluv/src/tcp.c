@@ -4,12 +4,17 @@ duk_ret_t duv_new_tcp(duk_context *ctx) {
   uv_tcp_t* handle;
 
   dschema_check(ctx, (const duv_schema_entry[]) {
+    {"issecurity", duk_is_boolean},
     {NULL}
   });
 
   handle = duk_push_fixed_buffer(ctx, sizeof(*handle));
+  handle->is_security = duk_get_boolean(ctx, 0);
   duv_check(ctx, uv_tcp_init(duv_loop(ctx), handle));
   handle->data = duv_setup_handle(ctx);
+  handle->ssl_initialized = false;
+  handle->ssl_ctx = NULL;
+  handle->ssl = NULL;
   return 1;
 }
 

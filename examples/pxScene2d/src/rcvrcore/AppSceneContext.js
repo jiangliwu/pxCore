@@ -668,11 +668,10 @@ if (isDuk) {
                            if (filePath === 'ws') {
                              modData = require('rcvrcore/' + filePath + '_wrap');
                              onImportComplete([modData, origFilePath]);
+                           }else{
+                             console.log("Not permitted to use the module " + filePath);
+                             reject("include failed due to module not permitted");
                            }
-                           //modData = require('rcvrcore/' + filePath + '_wrap');
-                           //onImportComplete([modData, origFilePath]);
-                           console.log("Not permitted to use the module " + filePath);
-                           reject("include failed due to module not permitted");
                            return;
                            } else if (filePath === 'http' || filePath === 'https') {
                            //console.log("Not permitted to use the module " + filePath);

@@ -280,7 +280,21 @@ int uv_tcp_connect(uv_connect_t* req,
   else
     return UV_EINVAL;
 
-  return uv__tcp_connect(req, handle, addr, addrlen, cb);
+  int ret =  uv__tcp_connect(req, handle, addr, addrlen, cb);
+
+  if (ret == 0 && handle && handle->is_security) { // ssl init
+    if (!handle->ssl_initialized) {
+      SSL_library_init();
+      SSL_load_error_strings();
+      handle->ssl_initialized = 1;
+    }
+    handle->ssl_ctx = SSL_CTX_new(SSLv23_method());
+    handle->ssl = SSL_new(handle->ssl_ctx);
+    SSL_set_fd(handle->ssl, handle->io_watcher.fd);
+    SSL_connect(handle->ssl); 
+  }
+
+  return ret;
 }
 
 

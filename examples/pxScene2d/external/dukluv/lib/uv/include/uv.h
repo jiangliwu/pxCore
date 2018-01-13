@@ -49,6 +49,9 @@ extern "C" {
 #include "uv-version.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/crypto.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
 # include "stdint-msvc2008.h"
@@ -445,6 +448,10 @@ UV_EXTERN uv_buf_t uv_buf_init(char* base, unsigned int len);
   size_t write_queue_size;                                                    \
   uv_alloc_cb alloc_cb;                                                       \
   uv_read_cb read_cb;                                                         \
+  int is_security;                                                            \
+  int ssl_initialized;                                                        \
+  SSL_CTX* ssl_ctx;                                                           \
+  SSL* ssl;                                                                   \
   /* private */                                                               \
   UV_STREAM_PRIVATE_FIELDS
 

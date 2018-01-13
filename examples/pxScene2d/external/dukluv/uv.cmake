@@ -32,6 +32,11 @@ set(LIBUVDIR ${CMAKE_CURRENT_LIST_DIR}/lib/uv)
 include_directories(
   ${LIBUVDIR}/src
   ${LIBUVDIR}/include
+  ${LIBUVDIR}/../../../libnode-v6.9.0/deps/openssl/openssl/include
+)
+
+link_directories(
+  ${LIBUVDIR}/../../../libnode-v6.9.0/out/Release
 )
 
 set(SOURCES
@@ -172,12 +177,14 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
   target_link_libraries(uv
     pthread
     kvm
+    openssl
   )
 endif()
 
 if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
   target_link_libraries(uv
     pthread
+    openssl
   )
 endif()
 
@@ -200,5 +207,6 @@ if(APPLE)
     ${FOUNDATION_LIBRARY}
     ${CORESERVICES_LIBRARY}
     ${APPLICATION_SERVICES_LIBRARY}
+    openssl
   )
 endif()
