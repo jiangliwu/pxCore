@@ -177,14 +177,14 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
   target_link_libraries(uv
     pthread
     kvm
-    openssl
+    ssl
   )
 endif()
 
 if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
   target_link_libraries(uv
     pthread
-    openssl
+    ssl
   )
 endif()
 
