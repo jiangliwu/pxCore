@@ -863,6 +863,9 @@ start:
     } else if (stream->flags & UV_STREAM_BLOCKING) {
       /* If this is a blocking stream, try again. */
       goto start;
+    } else if (stream->is_security) { 
+      /* ssl and no-block, try again */
+      goto start;
     }
   } else {
     /* Successful write */

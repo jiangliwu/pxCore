@@ -112,10 +112,6 @@
 var http = require('http');
 var url = require('url');
 var dukluv = require('dukluv');
-/**
- * this is the webscoket key
- */
-var sKey = 'pxscene-websocket-key-((@&*^!';
 var Tcp = dukluv.Tcp;
 /**
  * These are the possible WebSocket operation codes as documented in the WebSocket
@@ -168,7 +164,11 @@ function Client(wsurl, options) {
   this.handleShaked = false;
   this.host = host;
   this.port = parseInt(port, 10);
-  this.wbKey = Duktape.enc('base64', sKey + Date.now());
+  var key = '';
+  for (var i = 0; i < 16; i++) {
+    key += Math.floor(Math.random() * 16).toString(16);
+  }
+  this.wbKey = Duktape.enc('base64', key);
   this.readyState = READY_STATUS.CONNECTING;
   this.connect(this.host, this.port, this.onConnect);
   this.connectTimeoutHander = setTimeout(function () {
@@ -417,25 +417,33 @@ Client.prototype.onRead = function onRead(err, data) {
     this.close();
     return;
   }
+  
+  if (!data) {  // EOF close
+    this.onError({ code: ERROR_CODE.NORMAL, message: 'connection close because of read EOF' });
+    this.close();
+    return;
+  }
+  
   if (!this.handleShaked) {
     clearTimeout(this.connectTimeoutHander);
     this.connectTimeoutHander = null;
     var shakeErr = this._doHandlerShake(data);
     if (shakeErr) {  // hand shake failed , should close connection
+      console.error(Buffer(data).toString());
       this.onError(shakeErr);
       this.close();
     } else { // hand shake succeed
-      this.readyState = READY_STATUS.OPEN;
-      this.emit('open');
-      if (this.onopen) {
-        this.onopen();
+      if (this.readyState !== READY_STATUS.CONNECTING) { // already closed
+        this.close();
+      } else {
+        this.readyState = READY_STATUS.OPEN;
+        this.emit('open');
+        if (this.onopen) {
+          this.onopen();
+        }
       }
     }
   } else {
-    if (!data) {  // EOF close
-      this.onError({ code: ERROR_CODE.NORMAL, message: 'connection close because of read EOF' });
-      this.close();
-    }
     this.onMessage(data);
   }
 };
