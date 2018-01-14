@@ -332,7 +332,7 @@ elseif (WIN32)
 
     set(PLATFORM_LIBRARIES pxCore.lib pthreadVC2.lib opengl32.lib Winmm.lib zlib.lib freetype253MT_D.lib  libcurld.lib
                     Ws2_32.lib Wldap32.lib glew32s.lib libpng16.lib libjpeg.lib msvcrt.lib psapi.lib iphlpapi.lib
-                    userenv.lib gtest.lib cares.lib http_parser.lib icutools.lib icustubdata.lib icudata.lib icuucx.lib icui18n.lib libuv.lib openssl.lib
+                    userenv.lib gtest.lib cares.lib http_parser.lib icutools.lib icustubdata.lib icudata.lib icuucx.lib icui18n.lib openssl.lib
                     rtCore_s.lib common.lib crash_generation_client.lib exception_handler.lib)
 
     IF (SUPPORT_NODE)

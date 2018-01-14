@@ -49,9 +49,6 @@ extern "C" {
 #include "uv-version.h"
 #include <stddef.h>
 #include <stdio.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/crypto.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
 # include "stdint-msvc2008.h"
@@ -64,6 +61,10 @@ extern "C" {
 #else
 # include "uv-unix.h"
 #endif
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/crypto.h>
 
 /* Expand this list if necessary. */
 #define UV_ERRNO_MAP(XX)                                                      \

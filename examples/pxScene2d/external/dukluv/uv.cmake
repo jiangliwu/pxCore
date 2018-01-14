@@ -37,6 +37,7 @@ include_directories(
 
 link_directories(
   ${LIBUVDIR}/../../../libnode-v6.9.0/out/Release
+  ${LIBUVDIR}/../../../libnode-v6.9.0/Release/lib
 )
 
 set(SOURCES
@@ -196,6 +197,7 @@ if(WIN32)
     iphlpapi.lib
     advapi32.lib
     userenv.lib
+    openssl.lib
   )
 endif()
 

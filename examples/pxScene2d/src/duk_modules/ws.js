@@ -184,6 +184,7 @@ Client.prototype.__proto__ = Tcp.prototype;
  */
 Client.prototype.onConnect = function onConnect(err) {
   if (err) {
+    this.clearTimeout();
     this.onError({ code: ERROR_CODE.NORMAL, message: err.toString() });
     this.close();
     return;
@@ -406,6 +407,12 @@ Client.prototype.onMessage = function (data) {
   }
 };
 
+Client.prototype.clearTimeout = function() {
+  if (!this.connectTimeoutHander) return;
+  clearTimeout(this.connectTimeoutHander);
+  this.connectTimeoutHander = null;
+}
+
 /**
  * the tcp read callback
  * @param err the err
@@ -415,18 +422,19 @@ Client.prototype.onRead = function onRead(err, data) {
   if (err) {  // directly close
     this.onError({ code: ERROR_CODE.NORMAL, message: err.toString() });
     this.close();
+    this.clearTimeout();
     return;
   }
   
   if (!data) {  // EOF close
     this.onError({ code: ERROR_CODE.NORMAL, message: 'connection close because of read EOF' });
     this.close();
+    this.clearTimeout();
     return;
   }
   
   if (!this.handleShaked) {
-    clearTimeout(this.connectTimeoutHander);
-    this.connectTimeoutHander = null;
+    this.clearTimeout();
     var shakeErr = this._doHandlerShake(data);
     if (shakeErr) {  // hand shake failed , should close connection
       console.error(Buffer(data).toString());
@@ -506,6 +514,7 @@ Client.prototype.close = function () {
  */
 Client.prototype.onWrite = function onWrite(err) {
   if (err) { // write error close
+    this.clearTimeout();
     this.onError({ code: ERROR_CODE.NORMAL, message: err.toString() });
     this.close();
   }
