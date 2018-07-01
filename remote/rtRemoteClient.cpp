@@ -79,12 +79,21 @@ rtRemoteClient::rtRemoteClient(rtRemoteEnvironment* env, int fd,
   sockaddr_storage const& local_endpoint, sockaddr_storage const& remoteEndpoint)
   : m_stream(new rtRemoteStream(env, fd, local_endpoint, remoteEndpoint))
   , m_env(env)
+  , m_ws_instance(nullptr)
 {
 }
 
 rtRemoteClient::rtRemoteClient(rtRemoteEnvironment* env, sockaddr_storage const& remoteEndpoint)
   : m_stream(new rtRemoteStream(env, -1, sockaddr_storage(), remoteEndpoint))
   , m_env(env)
+  , m_ws_instance(nullptr)
+{
+}
+
+rtRemoteClient::rtRemoteClient(rtRemoteEnvironment* env, uWS::WebSocket<uWS::SERVER>* ws)
+  : m_stream(new rtRemoteStream(env, ws))
+  , m_env(env)
+  , m_ws_instance(ws)
 {
 }
 
@@ -118,6 +127,18 @@ rtRemoteClient::onMessage(rtRemoteMessagePtr const& doc)
   auto self = shared_from_this();
   m_env->enqueueWorkItem(self, doc);
   return RT_OK;
+}
+
+rtError
+rtRemoteClient::onWebSocketMessage(char* buffer, size_t bufferLen)
+{
+  rtRemoteMessagePtr doc;
+  rtError err = rtParseMessage(buffer, static_cast<int>(bufferLen), doc);
+  if (err != RT_OK)
+  {
+    return err;
+  }
+  return this->onMessage(doc);
 }
 
 rtError
@@ -168,6 +189,9 @@ rtRemoteClient::open()
   auto self = shared_from_this();
   m_stream->setCallbackHandler(self);
 
+  if (m_ws_instance != nullptr) {
+    return RT_OK;
+  }
   rtError err = connectRpcEndpoint();
   if (err != RT_OK)
   {

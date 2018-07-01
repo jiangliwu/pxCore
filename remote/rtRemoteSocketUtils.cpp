@@ -17,7 +17,6 @@ limitations under the License.
 */
 
 #include "rtRemoteSocketUtils.h"
-#include "rtRemoteWebSocketUtils.h"
 
 #include <cstdio>
 #include <sstream>
@@ -333,9 +332,8 @@ rtSocketToString(sockaddr_storage const& ss)
 }
 
 rtError
-rtSendDocument(rapidjson::Document const& doc, int fd, sockaddr_storage const* dest, rtRemoteEnvironment* env)
+rtSendDocument(rapidjson::Document const& doc, int fd, sockaddr_storage const* dest)
 {
-
   rapidjson::StringBuffer buff;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buff);
   doc.Accept(writer);
@@ -379,54 +377,32 @@ rtSendDocument(rapidjson::Document const& doc, int fd, sockaddr_storage const* d
   }
   else
   {
+    // send length first
+    int n = buff.GetSize();
+    n = htonl(n);
 
-    if (env && (*env->getWebsocketFdMap())[fd])
+    struct msghdr msg;
+    struct iovec iov[2];
+    memset (&msg, '\0', sizeof (msg));
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 2;
+    iov[0].iov_base = &n;
+    iov[0].iov_len = sizeof(n);
+    iov[1].iov_base = const_cast<char*>(buff.GetString());
+    iov[1].iov_len = buff.GetSize();
+
+    int flags = 0;
+    #ifndef __APPLE__
+    flags = MSG_NOSIGNAL;
+    #endif
+
+    while (sendmsg (fd, &msg, flags) < 0)
     {
-      char wbResponseBuff[64]; // the websocket header max length is 20
-      int headerLen;
-      rtRemoteWebSocketUtils::getWebsocketResponseHeader(buff.GetSize(), wbResponseBuff, headerLen);
-      if (write(fd, wbResponseBuff, headerLen) <= 0)
-      {
-        rtError e = rtErrorFromErrno(errno);
-        rtLogError("sendto websocket frame header failed %s", rtStrError(e));
-        return e;
-      }
-
-      if (write(fd, const_cast<char*>(buff.GetString()), buff.GetSize()) <= 0)
-      {
-        rtError e = rtErrorFromErrno(errno);
-        rtLogError("sendto websocket frame body failed %s", rtStrError(e));
-        return e;
-      }
-    }
-    else // normal socket send message back
-    {
-      // send length first
-      int n = buff.GetSize();
-      n = htonl(n);
-      struct msghdr msg;
-      struct iovec iov[2];
-      memset(&msg, '\0', sizeof(msg));
-      msg.msg_iov = iov;
-      msg.msg_iovlen = 2;
-      iov[0].iov_base = &n;
-      iov[0].iov_len = sizeof(n);
-      iov[1].iov_base = const_cast<char*>(buff.GetString());
-      iov[1].iov_len = buff.GetSize();
-
-      int flags = 0;
-#ifndef __APPLE__
-      flags = MSG_NOSIGNAL;
-#endif
-
-      while (sendmsg(fd, &msg, flags) < 0)
-      {
-        if (errno == EINTR)
-          continue;
-        rtError e = rtErrorFromErrno(errno);
-        rtLogError("failed to send message. %s", rtStrError(e));
-        return e;
-      }
+      if (errno == EINTR)
+        continue;
+      rtError e = rtErrorFromErrno(errno);
+      rtLogError("failed to send message. %s", rtStrError(e));
+      return e;
     }
   }
 
@@ -434,10 +410,19 @@ rtSendDocument(rapidjson::Document const& doc, int fd, sockaddr_storage const* d
 }
 
 rtError
-rtProcessSocketMessage(int fd, rtRemoteSocketBuffer& buff, rtRemoteMessagePtr& doc, int n)
+rtReadMessage(int fd, rtRemoteSocketBuffer& buff, rtRemoteMessagePtr& doc)
 {
-  int capacity = static_cast<int>(buff.capacity());
   rtError err = RT_OK;
+
+  int n = 0;
+  int capacity = static_cast<int>(buff.capacity());
+
+  err = rtReadUntil(fd, reinterpret_cast<char *>(&n), 4);
+  if (err != RT_OK)
+    return err;
+
+  n = ntohl(n);
+
   if (n > capacity)
   {
     rtLogWarn("buffer capacity %d not big enough for message size: %d", capacity, n);
@@ -456,57 +441,12 @@ rtProcessSocketMessage(int fd, rtRemoteSocketBuffer& buff, rtRemoteMessagePtr& d
     return err;
   }
 
-#ifdef RT_RPC_DEBUG
+  #ifdef RT_RPC_DEBUG
   rtLogDebug("read (%d):\n***IN***\t\"%.*s\"\n", static_cast<int>(buff.size()), static_cast<int>(buff.size()), &buff[0]);
-#endif
+  #endif
+
   return rtParseMessage(&buff[0], n, doc);
 }
-
-rtError
-rtReadMessage(int fd, rtRemoteSocketBuffer& buff, rtRemoteMessagePtr& doc, rtRemoteEnvironment* env)
-{
-  rtError err = RT_OK;
-  char lengthBuff[4];
-  int n = 0;
-  int capacity = static_cast<int>(buff.capacity());
-
-  err = rtReadUntil(fd, lengthBuff, 4);
-  if (err != RT_OK)
-    return err;
-
-  int type = rtRemoteWebSocketUtils::getMessageType(lengthBuff, 4); // get the message type
-  if (type == WEB_SOCKET_HEADER)  // websocket hand shake request
-  {
-    err = rtRemoteWebSocketUtils::doHandShake(fd);
-    if (err != RT_OK)
-    {
-      return err;
-    }
-    else // mark it
-    {
-      (*env->getWebsocketFdMap())[fd] = true;
-    }
-  }
-  else if (type == WEB_SOCKET_BODY)
-  {
-    err = rtRemoteWebSocketUtils::readWebsocketMessage(fd, lengthBuff, &buff[0], n, capacity);
-    if (err != RT_OK)
-    {
-      return err;
-    }
-    return rtParseMessage(&buff[0], n, doc);
-  }
-  else  // normal socket body
-  {
-    memcpy(&n, lengthBuff, 4);
-    n = htonl(n);
-    return rtProcessSocketMessage(fd, buff, doc, n);
-  }
-
-  // this mean got un identified bytes, should return failed directly
-  return RT_FAIL;
-}
-
 
 rtError
 rtParseMessage(char const* buff, int n, rtRemoteMessagePtr& doc)

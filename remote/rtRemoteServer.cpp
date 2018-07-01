@@ -201,17 +201,6 @@ rtRemoteServer::rtRemoteServer(rtRemoteEnvironment* env)
 {
   memset(&m_rpc_endpoint, 0, sizeof(m_rpc_endpoint));
 
-  // read from config file
-  uint16_t const tcp_port = m_env->Config->resolver_tcp_port();
-  std::string tcp_address = m_env->Config->resolver_tcp_address();
-  // parse rpc tcp endpoint
-  rtError e = rtParseAddress(m_rpc_endpoint, tcp_address.c_str(), tcp_port, nullptr);
-  if (e != RT_OK)
-  {
-    rtLogWarn("failed to parse rpc tcp  address: %s. %s", tcp_address.c_str(), rtStrError(e));
-    memset(&m_rpc_endpoint, 0, sizeof(m_rpc_endpoint));
-  }
-
   m_shutdown_pipe[0] = -1;
   m_shutdown_pipe[1] = -1;
 
@@ -283,6 +272,7 @@ rtRemoteServer::~rtRemoteServer()
 rtError
 rtRemoteServer::open()
 {
+  openWebSocketListener();
   rtError err = openRpcListener();
   if (err != RT_OK)
     return err;
@@ -388,6 +378,8 @@ rtRemoteServer::runListener()
       if (err == RT_OK)
         lastKeepAliveCheck = now;
     }
+    // poll websocket events
+    m_websocket_hub->poll();
   }
 }
 
@@ -416,6 +408,17 @@ rtRemoteServer::doAccept(int fd)
   newClient->setStateChangedHandler(&rtRemoteServer::onClientStateChanged_Dispatch, this);
   newClient->open();
   m_connected_clients.push_back(newClient);
+}
+
+std::shared_ptr<rtRemoteClient>
+rtRemoteServer::doWebSocketAccept(uWS::WebSocket<uWS::SERVER>* ws)
+{
+  rtLogInfo("new websocket connection from %s", ws->getAddress().address);
+  std::shared_ptr<rtRemoteClient> newClient(new rtRemoteClient(m_env, ws));
+  newClient->setStateChangedHandler(&rtRemoteServer::onClientStateChanged_Dispatch, this);
+  newClient->open();
+  m_connected_clients.push_back(newClient);
+  return newClient;
 }
 
 rtError
@@ -645,36 +648,89 @@ rtRemoteServer::unregisterDisconnectedCallback( clientDisconnectedCallback cb, v
 }
 
 rtError
+rtRemoteServer::openWebSocketListener()
+{
+  m_websocket_hub = new uWS::Hub();
+
+  int32_t const port = m_env->Config->resolver_web_socket_port();
+  std::string address = m_env->Config->resolver_tcp_address();
+  if (!m_websocket_hub->listen(address.c_str(), port))
+  {
+    rtLogWarn("websocket server start failed : %s %d", address.c_str(), port);
+    return RT_ERROR_INVALID_ARG;
+  }
+
+  m_websocket_hub->onConnection(
+    [&](uWS::WebSocket<uWS::SERVER>* ws, uWS::HttpRequest /*httpRequest*/)
+    {
+      ws->setUserData(this->doWebSocketAccept(ws).get());
+    }
+  );
+
+  m_websocket_hub->onMessage(
+    [&](uWS::WebSocket<uWS::SERVER>* ws, char* buffer, size_t bufferLen, uWS::OpCode code)
+    {
+      rtRemoteClient* client = static_cast<rtRemoteClient*>(ws->getUserData());
+      if (client)
+      {
+        rtError err = client->onWebSocketMessage(buffer, bufferLen);
+        if (err != RT_OK)
+        {
+          rtLogError("websocket message read fail %s", rtStrError(err));
+        }
+      }
+    });
+
+  m_websocket_hub->onDisconnection(
+    [&](uWS::WebSocket<uWS::SERVER>* ws, int code, char* buffer, size_t bufferLen)
+    {
+      rtRemoteClient *client = static_cast<rtRemoteClient*>(ws->getUserData());
+      if (client)
+      {
+        auto itr = std::find_if(m_connected_clients.begin(), m_connected_clients.end(),
+                             [&client](std::shared_ptr<rtRemoteClient> const& c)
+                             { return c.get() == client; });
+        if (itr != m_connected_clients.end())
+        {
+          this->onClientStateChanged(*itr, rtRemoteClient::State::Shutdown);
+        }
+      }
+      ws->setUserData(nullptr);
+    }
+  );
+  rtLogInfo("websocket server on %s:%d", address.c_str(), port);
+  return RT_OK;
+}
+
+rtError
 rtRemoteServer::openRpcListener()
 {
   int ret = 0;
+  char path[UNIX_PATH_MAX];
+
+  memset(path, 0, sizeof(path));
   cleanupStaleUnixSockets();
-  // this mean empty adress, so we set a random address to it
-  if (strcmp(rtSocketToString(m_rpc_endpoint).c_str(), "inet::0") == 0)
+
+  if (isUnixDomain(m_env))
   {
-    char path[UNIX_PATH_MAX];
-    memset(path, 0, sizeof(path));
-    if (isUnixDomain(m_env))
-    {
-      rtError e = rtCreateUnixSocketName(0, path, sizeof(path));
-      if (e != RT_OK)
-        return e;
+    rtError e = rtCreateUnixSocketName(0, path, sizeof(path));
+    if (e != RT_OK)
+      return e;
 
-      ret = unlink(path); // reuse path if needed
-      if (ret == -1 && errno != ENOENT)
-      {
-        rtError e = rtErrorFromErrno(errno);
-        rtLogInfo("error trying to remove %s. %s", path, rtStrError(e));
-      }
-
-      struct sockaddr_un* unAddr = reinterpret_cast<sockaddr_un*>(&m_rpc_endpoint);
-      unAddr->sun_family = AF_UNIX;
-      strncpy(unAddr->sun_path, path, UNIX_PATH_MAX);
-    }
-    else
+    ret = unlink(path); // reuse path if needed
+    if (ret == -1 && errno != ENOENT)
     {
-      rtGetDefaultInterface(m_rpc_endpoint, 0);
+      rtError e = rtErrorFromErrno(errno);
+      rtLogInfo("error trying to remove %s. %s", path, rtStrError(e));
     }
+
+    struct sockaddr_un *unAddr = reinterpret_cast<sockaddr_un*>(&m_rpc_endpoint);
+    unAddr->sun_family = AF_UNIX;
+    strncpy(unAddr->sun_path, path, UNIX_PATH_MAX);
+  }
+  else
+  {
+    rtGetDefaultInterface(m_rpc_endpoint, 0);
   }
 
   m_listen_fd = socket(m_rpc_endpoint.ss_family, SOCK_STREAM, 0);
@@ -686,8 +742,7 @@ rtRemoteServer::openRpcListener()
   }
 
   fcntl(m_listen_fd, F_SETFD, fcntl(m_listen_fd, F_GETFD) | FD_CLOEXEC);
-  int reuse = 1;
-  setsockopt(m_listen_fd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
+
   if (m_rpc_endpoint.ss_family != AF_UNIX)
   {
     uint32_t one = 1;

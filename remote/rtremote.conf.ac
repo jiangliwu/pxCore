@@ -16,7 +16,7 @@
     "default_value":"tcp",
     "type":"string" },
 
-{ "name":"rt.rpc.resolver.tcp.port",
+{ "name":"rt.rpc.resolver.web_socket.port",
     "default_value":"10005",
     "type":"int32" },
 
